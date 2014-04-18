@@ -822,13 +822,6 @@ Zlib.RawInflateStream.prototype.concatBuffer = function() {
   return this.buffer;
 };
 
-/**
- * @return {!(Array|Uint8Array)} current output buffer.
- */
-Zlib.RawInflateStream.prototype.getBytes = function() {
-  return USE_TYPEDARRAY ?
-    this.output.subarray(0, this.op) : this.output.slice(0, this.op);
-};
 
 // end of scope
 });
