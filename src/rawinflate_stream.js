@@ -21,8 +21,6 @@ var buildHuffmanTable = Zlib.Huffman.buildHuffmanTable;
  * @constructor
  */
 Zlib.RawInflateStream = function(input, ip, opt_buffersize) {
-  /** @type {!(Array|Uint8Array)} inflated buffer */
-  this.buffer;
   /** @type {!Array.<(Array|Uint8Array)>} */
   this.blocks = [];
   /** @type {number} block size. */
@@ -436,7 +434,7 @@ Zlib.RawInflateStream.prototype.readUncompressedBlockHeader = function() {
   this.ip = ip;
   this.blockLength = len;
   this.status = Zlib.RawInflateStream.Status.BLOCK_BODY_END;
-}
+};
 
 /**
  * parse uncompressed block.
@@ -798,15 +796,12 @@ Zlib.RawInflateStream.prototype.expandBuffer = function(opt_param) {
 Zlib.RawInflateStream.prototype.concatBuffer = function() {
   /** @type {!(Array|Uint8Array)} output buffer. */
   var buffer;
-
-  var resize = this.resize;
-
+  /** @type {number} */
   var op = this.op;
 
-  if (resize) {
+  if (this.resize) {
     if (USE_TYPEDARRAY) {
-      buffer = new Uint8Array(op);
-      buffer.set(this.output.subarray(this.sp, op));
+      buffer = new Uint8Array(this.output.subarray(this.sp, op));
     } else {
       buffer = this.output.slice(this.sp, op);
     }
@@ -815,11 +810,9 @@ Zlib.RawInflateStream.prototype.concatBuffer = function() {
       USE_TYPEDARRAY ? this.output.subarray(this.sp, op) : this.output.slice(this.sp, op);
   }
 
-
-  this.buffer = buffer;
   this.sp = op;
 
-  return this.buffer;
+  return buffer;
 };
 
 
