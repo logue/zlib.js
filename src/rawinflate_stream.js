@@ -106,6 +106,14 @@ Zlib.RawInflateStream.prototype.decompress = function(newInput, ip) {
     this.ip = ip;
   }
 
+  if (this.output.length > 4 * Zlib.RawInflateStream.MaxBackwardLength
+      && this.sp > this.output.length >>> 1) {
+    // we may face the end of the buffer very soon so probably it's better
+    // to move the backward area to the beginning already or otherwise
+    // soon we will move the same area plus large inflated data
+    this.rewindOutputBuffer();
+  }
+
   // decompress
   while (!stop) {
     switch (this.status) {
@@ -452,7 +460,9 @@ Zlib.RawInflateStream.prototype.parseUncompressedBlock = function() {
   // XXX: とりあえず素直にコピー
   while (len--) {
     if (op === output.length) {
+      this.op = op;
       output = this.expandBuffer({fixRatio: 2});
+      op = this.op;
     }
 
     // not enough input buffer
@@ -670,7 +680,9 @@ Zlib.RawInflateStream.prototype.decodeHuffman = function() {
     // literal
     if (code < 256) {
       if (op === olength) {
+        this.op = op;
         output = this.expandBuffer();
+        op = this.op;
         olength = output.length;
       }
       output[op++] = code;
@@ -710,8 +722,10 @@ Zlib.RawInflateStream.prototype.decodeHuffman = function() {
     }
 
     // lz77 decode
-    if (op + codeLength >= olength) {
+    while (op + codeLength >= olength) {
+      this.op = op;
       output = this.expandBuffer();
+      op = this.op;
       olength = output.length;
     }
 
@@ -755,6 +769,16 @@ Zlib.RawInflateStream.prototype.expandBuffer = function(opt_param) {
   var input = this.input;
   var output = this.output;
 
+  // First rewind the buffer but only if it will recover a considerable
+  // amount of memory. Avoid moving large part of the buffer to a short
+  // distance which will recover few memory and we will need another
+  // expansion soon. In such case it's better to go to the reallocation
+  // immediately.
+  if (this.sp > 2 * Zlib.RawInflateStream.MaxBackwardLength) {
+    this.rewindOutputBuffer();
+    return this.output;
+  }
+
   if (opt_param) {
     if (typeof opt_param.fixRatio === 'number') {
       ratio = opt_param.fixRatio;
@@ -776,6 +800,14 @@ Zlib.RawInflateStream.prototype.expandBuffer = function(opt_param) {
     newSize = output.length * ratio;
   }
 
+  // Ignore all calculations above, maybe should be removed. Instead expand
+  // the buffer twice if it is small or at 1 MB steps if it is large.
+  if (output.length < 1048576) {
+    newSize = 2 * output.length;
+  } else {
+    newSize = output.length + 1048576;
+  }
+
   // buffer expantion
   if (USE_TYPEDARRAY) {
     buffer = new Uint8Array(newSize);
@@ -787,6 +819,34 @@ Zlib.RawInflateStream.prototype.expandBuffer = function(opt_param) {
   this.output = buffer;
 
   return this.output;
+};
+
+/**
+ * Rewind the output buffer: move the valuable contents to the beginning
+ * of the buffer. This recovers some memory at the end of the buffer and
+ * minimizes the need to expand. Also updates this.sp and this.op.
+ */
+Zlib.RawInflateStream.prototype.rewindOutputBuffer = function() {
+  if (this.sp < Zlib.RawInflateStream.MaxBackwardLength)
+    return;
+
+  if (this.output.copyWithin) {
+    this.output.copyWithin(0,
+        this.sp - Zlib.RawInflateStream.MaxBackwardLength, this.op);
+  } else if (USE_TYPEDARRAY) {
+    var tmp = new Uint8Array(this.output.subarray(
+        this.sp - Zlib.RawInflateStream.MaxBackwardLength, this.op));
+    this.output.set(tmp);
+  } else {
+    var tmp = this.output.slice(
+        this.sp - Zlib.RawInflateStream.MaxBackwardLength, this.op);
+    if (this.output.length > tmp.length)
+      this.output = tmp.concat(new Array(this.output.length - tmp.length));
+    else
+      this.output = tmp;
+  }
+  this.op -= this.sp - Zlib.RawInflateStream.MaxBackwardLength;
+  this.sp = Zlib.RawInflateStream.MaxBackwardLength;
 };
 
 /**
