@@ -273,7 +273,9 @@ Zlib.Zip.prototype.compress = function() {
   }
 
   // end of central directory
-  endOfCentralDirectorySize = 46 + (this.comment ? this.comment.length : 0);
+  // zlib.js 0.2.0のzip.js/zip.min.jsのバグの修正[ZIPファイルの破損]
+  // http://www.petitmonte.com/javascript/zip_js_error.html
+  endOfCentralDirectorySize = 22 + (this.comment ? this.comment.length : 0);
   output = new (USE_TYPEDARRAY ? Uint8Array : Array)(
     localFileSize + centralDirectorySize + endOfCentralDirectorySize
   );
